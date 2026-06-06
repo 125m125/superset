@@ -27,6 +27,7 @@ from superset import event_logger, security_manager
 from superset.constants import MODEL_API_RW_METHOD_PERMISSION_MAP
 from superset.daos.log import LogDAO
 from superset.exceptions import SupersetSecurityException
+from superset.extensions import stats_logger_manager
 from superset.superset_typing import FlaskResponse
 from superset.views.base_api import BaseSupersetModelRestApi, statsd_metrics
 from superset.views.log import LogMixin
@@ -40,7 +41,7 @@ from superset.views.log.schemas import (
 
 class LogRestApi(LogMixin, BaseSupersetModelRestApi):
     datamodel = SQLAInterface(models.Log)
-    include_route_methods = {"get_list", "get", "post", "recent_activity"}
+    include_route_methods = {"get_list", "get", "post", "recent_activity", "metrics"}
     class_permission_name = "Log"
     method_permission_name = MODEL_API_RW_METHOD_PERMISSION_MAP
     resource_name = "log"
@@ -101,6 +102,22 @@ class LogRestApi(LogMixin, BaseSupersetModelRestApi):
         except SupersetSecurityException as ex:
             return self.response(403, message=ex.message)
         return None
+
+    @expose("/metrics", methods=("GET",))
+    @statsd_metrics
+    def metrics(self) -> FlaskResponse:
+        """Get metrics output for the currently active stats logger
+        ---
+        get:
+          summary: Get metrics output for the currently active stats logger
+          responses:
+            200:
+              description: The metrics in the format of the active stats logger
+            404:
+              description: If the current stats logger does not support pulling metrics
+              $ref: '#/components/responses/404'
+        """
+        return stats_logger_manager.instance.write() or self.response_404()
 
     @expose("/recent_activity/", methods=("GET",))
     @protect()
